@@ -10,6 +10,7 @@ from random import shuffle
 # a) Wybiera wszystkie kanały z tabelki,
 # b) Dla kanału:
 #    I. Przefiltrowywuje przez wybrane zakresy dat (0, 1, 2)
+#    Ia. Usuwa wszystkie, elementy dla których data wyboru jest mniejsza i większa od 3 od wybranych już elementów.
 #    II. Sprawdza czy gotówka jest więskza od 75k i nie ma wybranego nic z gotówką większą niż 75k
 #       1. Jeśli tak: wybiera element z najmniejszą ilością zakresów dat, z tabelka, gdy gotówka >= 75k
 #       2. Jeśli nie: pomija
@@ -23,24 +24,20 @@ class Probkowanie:
     def __init__(self, content: pd.DataFrame) -> None:
         self.próbki: dict = {} # Wybrane próbki z zakresów.
         self.filtry: dict = {} # Zobacz więcej w _dodaj_filtry_do_trackowania 
-        self.zawartosc: pd.DataFrame = content
-    
-    def _podziel_zawartosc_na_zakresy_dat(self) -> None:
-        """Modyfikuje główny dataframe, dodaje zakresy dat zależne od właśnie dat (0 jeśli data =< 10, 2 jeśli data =< 20, 3 jeśli reszta.)."""
-
-        self.zawartosc[XlsxWzor.DATA_URUCHOMIENIA] = pd.to_datetime(self.zawartosc[XlsxWzor.DATA_URUCHOMIENIA])
-        self.zawartosc[XlsxWzor.ZAKRES_DATY] = self.zawartosc[XlsxWzor.DATA_URUCHOMIENIA].apply(lambda data: int(data.day / (10 + 1)))
+        self.zawartosc: pd.DataFrame = content    
 
     def wylosuj_próbki(self):
         """Zajmuje się losowaniem próbek - główna i jedyna methoda do wywoływania z zewnątrz."""
 
-        self._podziel_zawartosc_na_zakresy_dat()
+        # Dzieli tabelę na zakresy grup.
+        self.zawartosc[XlsxWzor.ZAKRES_DATY] = self.zawartosc[XlsxWzor.DATA_URUCHOMIENIA].apply(lambda data: int(data.day / (10 + 1)))
         zawartosc_grupy: tuple = self.zawartosc.groupby(XlsxWzor.KANAŁ)
 
         for kanał, grupa in zawartosc_grupy:
             # To są filtry traktowane priorytetowo.
             self.filtry[kanał] = {
                 XlsxWzor.ZAKRES_DATY: [],    # To jest wyjątek.
+                XlsxWzor.DATA_URUCHOMIENIA: [], # To jest wyjątek 2
                 XlsxWzor.PROWIZJA: [],
                 XlsxWzor.OPROCENTOWANIE: [],
                 XlsxWzor.ILOSC_RAT: [],
@@ -80,6 +77,15 @@ class Probkowanie:
             if len(frame) == 0:
                 frame = grupa.copy()
                 break
+            
+        # Usuwa wszystkie elementy, gdzie daty są 3 dni przed i 3 dni po już wybranym elementcie.
+        tymcz_frame: pd.DataFrame = frame.copy()
+        for data in self.filtry[kanał][XlsxWzor.DATA_URUCHOMIENIA]:
+            frame = frame.loc[~frame[XlsxWzor.DATA_URUCHOMIENIA].between(data - pd.Timedelta(days=3), data + pd.Timedelta(days=3))]
+
+            if len(frame) == 0:
+                frame = tymcz_frame.copy()
+                break
 
         # Wiersze wybrane już przez skrypt.
         wybrane_frame: pd.DataFrame = self._weź_wybrane_próbki_jako_frame(kanał)
@@ -103,7 +109,7 @@ class Probkowanie:
     
         for kolumna, wartości in self.filtry[kanał].items():
             # Jeśli kolumną, jest zakres daty, pomiń
-            if kolumna == XlsxWzor.ZAKRES_DATY:
+            if kolumna == XlsxWzor.ZAKRES_DATY or kolumna == XlsxWzor.DATA_URUCHOMIENIA:
                 continue
 
             tymcz_df: pd.DataFrame = pozostały_frame[~pozostały_frame[kolumna].isin(wartości)]

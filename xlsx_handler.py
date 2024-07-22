@@ -31,15 +31,37 @@ class XlsxHandler:
         if self.content.columns.tolist() != XlsxWzor.wez_wszystkie_kolumny():
             raise TypeError(f"Uwaga! Kolumny pliku: {self.sciezka} nie pokrywają się z template'em!")
 
-    
+    def zmodyfikuj_zawartość_o_daty(self, daty: list[str]) -> None:
+        """Modyfikuje zawartość pliku, jeśli chodzi o daty do wyboru."""
+
+        # Jeśli nie ma dat:
+        if not daty:
+            return
+
+        daty = [pd.to_datetime(data, format='%d.%m.%Y') for data in daty]
+        if daty[0] != daty[1]:
+            self.content = self.content.loc[self.content[XlsxWzor.DATA_URUCHOMIENIA].between(daty[0], daty[1])]
+        else:
+            self.content = self.content.loc[self.content[XlsxWzor.DATA_URUCHOMIENIA] == pd.to_datetime(daty[0], format='%d.%m.%Y')]
+
+    def przeczytaj_możliwe_daty(self) -> list[str]:
+        """Bierze z pliku do tablicy wszystkie daty z kolumny data uruchomienia."""
+        
+        return [data.strftime("%d.%m.%Y") for data in self.content[XlsxWzor.DATA_URUCHOMIENIA].tolist()]
+ 
     def zapisz_wybrane_próbki(self) -> pd.DataFrame:
         """Zapisuje wybrane już próbki razem z plikiem, z którego pochodzą."""
 
         frame: pd.DataFrame = self.content.loc[self.content[XlsxWzor.NUMER_WNIOSKU].isin(self.probki)].copy()
+
+        if len(frame) == 0:
+            print(f"UWAGA! Nie ma żadnych pasujących elementów w pliku {self.sciezka}")
+            return 
+
         frame.loc[:, XlsxWzor.PLIK_ŹRÓDŁOWY_ŚCIEŻKA] = self.sciezka
         frame.loc[:, XlsxWzor.PLIK_ŹRÓDŁOWY_NAZWA] = self.sciezka.split('\\')[-1]
         
-        najważniejsze_kolumny = XlsxWzor.wez_najważniejsze_kolumny()
+        najważniejsze_kolumny: list[str] = XlsxWzor.wez_najważniejsze_kolumny()
         
         połączony_frame: pd.DataFrame = pd.concat([
             frame[[XlsxWzor.PLIK_ŹRÓDŁOWY_NAZWA]],
@@ -54,8 +76,12 @@ class XlsxHandler:
     def wylosuj_próbki(self) -> None:
         """Losuje próbki do pokolorowania. """
 
+        if len(self.content) == 0:
+            return
+        
         probkowanie = Probkowanie(self.content)
         probkowanie.wylosuj_próbki()
+        # Wypłaszcza dict z wybranymi próbkami.
         self.probki = [i for k in probkowanie.próbki.values() for i in k]
 
     def pokoloruj_plik(self) -> None:
@@ -64,6 +90,7 @@ class XlsxHandler:
         skoroszyt: Workbook = load_workbook(self.sciezka, keep_vba=True)
         arkusz: Worksheet = skoroszyt.worksheets[0]
         
+        # Tutaj można zmienić kolor - text FFFF00 oznacza żółty w HEX DEC.
         color: PatternFill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
         
         for r in range(2, arkusz.max_row +1):

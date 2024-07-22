@@ -1,5 +1,6 @@
-from functions import zaznacz_próbki, zresetuj_próbki
+import functions as func
 import argparse
+from utils import prosty_error_wrapper
 
 # Główny punkt wejścia do aplikacji.
 
@@ -25,6 +26,7 @@ import argparse
 
 # Opis działania aplikacji znajduje się w pliku: samples.py
 
+@prosty_error_wrapper
 def main():
     """Punkt wejścia do aplikacji. """
     parser = argparse.ArgumentParser(description="Process some files.")
@@ -32,17 +34,33 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Wpisz '-h'")    
     parser_zaznacz = subparsers.add_parser("zaznacz", help="Zaznacza zawartość w plikach (próbkuje).")
     parser_zaznacz.add_argument("ścieżka", type=str, help="Ścieżka do podstawowego folderu.")
+    parser_zaznacz.add_argument('daty', nargs="?", help=("Daty, w ramach których skrypt będzie działał. "
+                                                         "Dodawać jako tekst, można dać jedną datę lub dwie. Format daty to jest dd.mm.YYYY - np:\n"
+                                                         "1.\"22.02.2024\" - taki zapis wybierze tylko jedną datę\n"
+                                                         "2.\"22.02.2024,24.02.2024\" - wybierze daty pomiędzy tymi dwoma datami."))
 
     parser_usun = subparsers.add_parser("ukryj", help="Usuwa zaznaczoną zawartość w plikach (anty-próbkuje)")
     parser_usun.add_argument("ścieżka", type=str, help="Ścieżka do podstawowego folderu.")
-    
+
+    parser_daty = subparsers.add_parser("daty", help="Wypisuje daty, jakie można użyć jako argumenty.")
+    parser_daty.add_argument("ścieżka", help="Ścieżka do podstawowego folderu.")
+
     args = parser.parse_args()
-    print(args.ścieżka)
 
     if args.command == "zaznacz":
-        zaznacz_próbki(args.ścieżka.replace("\"", ""))
+        if args.daty:
+            if "," in args.daty:
+                daty = args.daty.split(",")[:2]
+            else:
+                daty = [args.daty, args.daty]
+        else:
+             daty = []
+
+        func.zaznacz_próbki(args.ścieżka.replace("\"", ""), daty)
     elif args.command == "ukryj":
-        zresetuj_próbki(args.ścieżka.replace("\"", ""))
+        func.zresetuj_próbki(args.ścieżka.replace("\"", ""))
+    elif args.command == "daty":
+        func.sprawdź_ważne_daty(args.ścieżka.replace("\"", ""))
     else:
         parser.print_help()
 
